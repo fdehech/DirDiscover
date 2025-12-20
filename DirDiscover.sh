@@ -2,59 +2,72 @@
 
 clear
 
-echo "Web-Server Directory Discovery"
-echo "Coded by FuratDehech"
-echo "Version 1.0"
-
+echo "=============================="
+echo " Web-Server Directory Scanner "
+echo " Coded by FuratDehech"
+echo " Version 1.1"
+echo "=============================="
 sleep 1
 
-read -p "Type Webserver IP (Only HTTP SUPPORTED): " URL
-read -p "Type Port (Leave blank for default=80): " PORT
-
+# --- User inputs ---
+read -rp "Type Webserver IP or domain (HTTP only): " URL
+read -rp "Type Port [default: 80]: " PORT
 PORT=${PORT:-80}
-CMD="ping -c 1 -p $PORT $URL"
-HOST_STATUS=0
 
-while [ $HOST_STATUS -eq 0 ]; do
-    HOST_CHECK=$($CMD)
-    if [[ $HOST_CHECK == *" 0% packet loss"* ]]; then
-        echo "HOST [UP]"
-        HOST_STATUS=1
+# --- Check host availability ---
+echo "[*] Checking host availability..."
+
+while true; do
+    if ping -c 1 "$URL" &>/dev/null; then
+        echo "[+] HOST UP"
+        break
     else
-        echo "HOST [DOWN]"
-        read -p "VERIFY URL : " URL
+        echo "[-] HOST DOWN"
+        read -rp "Verify URL: " URL
     fi
 done
 
-read -p "Enter wordlist path: " WORDLIST_PATH
+# --- Wordlist & options ---
+read -rp "Enter wordlist path [default: /usr/share/wordlists/dirb/big.txt]: " WORDLIST_PATH
 WORDLIST_PATH=${WORDLIST_PATH:-"/usr/share/wordlists/dirb/big.txt"}
-read -p "VERBOSE 0-1: " VERBOSE
+
+read -rp "Verbose mode? (0 = No, 1 = Yes) [default: 0]: " VERBOSE
 VERBOSE=${VERBOSE:-0}
+
 clear
-echo "URL : http://$URL:$PORT"
-echo "Worlist : $WORDLIST_PATH"
+echo "[*] Target : http://$URL:$PORT"
+echo "[*] Wordlist : $WORDLIST_PATH"
+echo "--------------------------------"
 
-
-if [ -f "$WORDLIST_PATH" ]; then
-    exec 3< "$WORDLIST_PATH"
-    while IFS= read -r try <&3; do
-        Link="http://$URL:$PORT/$try"
-        echo -ne "Fetchin : $Link\r"
-        RES=$(curl -I -s "$Link" | head -n 1)
-        if [[ $RES == "HTTP/1.1 1"* ]];then
-                echo "[!] Informational : $Link"
-        elif [[ $RES == "HTTP/1.1 2"* ]];then
-                echo "[+] Success : $Link"
-        elif [[ $RES == "HTTP/1.1 3"* ]];then
-                echo "[*] Redirection : $Link"
-        elif [[ $RES == "HTTP/1.1 4"* ]];then
-                if [[ $VERBOSE == 1 ]];then
-                        echo "[-] Client Error : $Link"
-                fi
-        elif [[ $RES == "HTTP/1.1 5"* ]];then
-                if [[ $VERBOSE == 1 ]];then
-                        echo "[-] Server Error : $Link"
-                fi
-        fi
-    done
+# --- Validate wordlist ---
+if [[ ! -f "$WORDLIST_PATH" ]]; then
+    echo "[!] Wordlist not found!"
+    exit 1
 fi
+
+# --- Directory discovery ---
+while IFS= read -r DIR; do
+    LINK="http://$URL:$PORT/$DIR"
+    echo -ne "Fetching: $LINK\r"
+
+    STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$LINK")
+
+    case $STATUS in
+        1*)
+            echo "[!] Informational ($STATUS) : $LINK"
+            ;;
+        2*)
+            echo "[+] Found ($STATUS) : $LINK"
+            ;;
+        3*)
+            echo "[*] Redirect ($STATUS) : $LINK"
+            ;;
+        4*)
+            [[ $VERBOSE -eq 1 ]] && echo "[-] Client Error ($STATUS) : $LINK"
+            ;;
+        5*)
+            [[ $VERBOSE -eq 1 ]] && echo "[-] Server Error ($STATUS) : $LINK"
+            ;;
+    esac
+
+done < "$WORDLIST_PATH"
