@@ -39,7 +39,7 @@ chmod +x scanner.sh
 ### Usage
 
 ```bash
-./scanner.sh
+./DirDiscover.sh
 ```
 You will be prompted to enter:
 - Target IP or domain
